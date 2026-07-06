@@ -1,4 +1,11 @@
-from typing import Generic, Iterable, List, Optional, Self, TypeVar, Union, overload
+from __future__ import annotations
+
+from typing import Generic, Iterable, List, Optional, TypeVar, Union, overload
+
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
 
 from Common.cache import make_cache
 from Common.CEnum import FX_TYPE, KLINE_DIR

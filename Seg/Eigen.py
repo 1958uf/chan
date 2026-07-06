@@ -1,4 +1,7 @@
-from typing import Self
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
 
 from Bi.Bi import CBi
 from Combiner.KLine_Combiner import CKLine_Combiner
