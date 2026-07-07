@@ -409,6 +409,21 @@ if __name__ == "__main__":
                 query_code = normalize_code(user_input if user_input else code)
                 print(f"查询 {query_code} ...")
                 try:
-                    run_terminal_query(query_code, begin_time, end_time, data_src, lv_list, config)
+                    # 检查缓存是否需要更新
+                    if _needs_cache_update(query_code):
+                        print("本地无缓存或数据过期，正在从 BaoStock 拉取...")
+                        bs.login()
+                        try:
+                            _update_cache(query_code, begin_time)
+                        finally:
+                            bs.logout()
+                    else:
+                        print("命中本地缓存，跳过网络请求。")
+                    # 从本地 CSV 缓存读取并计算缠论
+                    CSV_API.base_dir = os.path.abspath(_CACHE_DIR)
+                    try:
+                        run_terminal_query(query_code, begin_time, end_time, DATA_SRC.CSV, lv_list, config)
+                    finally:
+                        CSV_API.base_dir = None  # 恢复默认，不影响其他逻辑
                 except Exception as e:
                     print(f"查询失败：{e}")
