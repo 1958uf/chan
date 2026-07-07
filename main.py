@@ -383,7 +383,7 @@ if __name__ == "__main__":
         print("缠论买卖点查询（直接回车查默认股票，/scan 选股，q 退出）")
         print(f"默认股票：{code}  起始：{begin_time}  股票池：{scan_pool_file}")
         while True:
-            user_input = input("\n请输入股票代码：").strip()
+            user_input = input("\n请输入代码：").strip()
             if user_input.lower() == 'q':
                 print("退出。")
                 break
