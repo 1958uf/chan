@@ -41,6 +41,8 @@ def parse_time_column(inp):
 
 
 class CSV_API(CCommonStockApi):
+    base_dir = None  # 为 None 时使用默认路径（DataAPI/../），设置后从该目录读取缓存文件
+
     def __init__(self, code, k_type=KL_TYPE.K_DAY, begin_date=None, end_date=None, autype=None):
         self.headers_exist = True  # 第一行是否是标题，如果是数据，设置为False
         self.columns = [
@@ -59,7 +61,10 @@ class CSV_API(CCommonStockApi):
     def get_kl_data(self):
         cur_path = os.path.dirname(os.path.realpath(__file__))
         k_type = self.k_type.name[2:].lower()
-        file_path = f"{cur_path}/../{self.code}_{k_type}.csv"
+        if CSV_API.base_dir is not None:
+            file_path = os.path.join(CSV_API.base_dir, f"{self.code}_{k_type}.csv")
+        else:
+            file_path = f"{cur_path}/../{self.code}_{k_type}.csv"
         if not os.path.exists(file_path):
             raise CChanException(f"file not exist: {file_path}", ErrCode.SRC_DATA_NOT_FOUND)
 
