@@ -15,20 +15,43 @@ from Plot.PlotDriver import CPlotDriver
 _CACHE_DIR = "chan_cache"
 
 
-def _last_business_day():
-    """返回上一个自然交易日（忽略节假日，仅排除周末）。
-    周一返回上周五，周六/日返回上周五，其他工作日返回昨天。
+def _bs_login(max_retry: int = 3) -> None:
+    """带重试的 BaoStock 登录。
+    功能：调用 bs.login() 并检查返回码，失败时最多重试 max_retry 次。
+    输入：max_retry - 最大重试次数，默认 3
+    输出：无（成功则返回，全部失败则抛 RuntimeError）
     """
-    from datetime import date, timedelta
+    import time as _time
+    for attempt in range(1, max_retry + 1):
+        lg = bs.login()
+        if lg.error_code == '0':
+            return
+        if attempt < max_retry:
+            sys.stdout.write(f"\n  BaoStock 登录失败（第{attempt}次），2秒后重试 ...\n")
+            sys.stdout.flush()
+            _time.sleep(2)
+    raise RuntimeError(f"BaoStock 登录失败，已重试 {max_retry} 次，请检查网络后重试。")
+
+
+def _last_business_day():
+    """返回最近一个已收盘的交易日（忽略节假日，仅排除周末）。
+    若今天是工作日且已过 15:30（A股收盘），返回今天；否则返回上一个工作日。
+    周一/周六/周日未收盘时返回上周五，周二~周五未收盘时返回昨天。
+    """
+    from datetime import date, datetime, timedelta
     today = date.today()
+    now = datetime.now()
     wd = today.weekday()   # 0=周一 … 6=周日
-    if wd == 0:            # 周一 → 上周五
+    # 工作日且已过收盘时间，今天数据已可用
+    if wd < 5 and (now.hour > 15 or (now.hour == 15 and now.minute >= 30)):
+        return today
+    if wd == 0:            # 周一未收盘 → 上周五
         return today - timedelta(days=3)
     elif wd == 6:          # 周日 → 上周五
         return today - timedelta(days=2)
     elif wd == 5:          # 周六 → 上周五
         return today - timedelta(days=1)
-    else:                  # 周二~周五 → 昨天
+    else:                  # 周二~周五未收盘 → 昨天
         return today - timedelta(days=1)
 
 
@@ -226,7 +249,7 @@ def run_scan_pool(pool_file, begin_time, end_time, lv_list, config, days=30, boa
     name_map = {}
     if needs_update:
         print(f"需更新缓存：{len(needs_update)} 只（其余 {len(codes) - len(needs_update)} 只命中缓存）")
-        bs.login()
+        _bs_login()
         try:
             for i, code in enumerate(needs_update, 1):
                 sys.stdout.write(f"\r  缓存更新 [{i:>3}/{len(needs_update)}] {code:<12} ...")
@@ -234,8 +257,23 @@ def run_scan_pool(pool_file, begin_time, end_time, lv_list, config, days=30, boa
                 try:
                     _update_cache(code, begin_time)
                 except Exception as e:
-                    sys.stdout.write('\n')
-                    print(f"  {code} 缓存失败：{e}")
+                    # 网络断连时自动重连一次再重试
+                    if '10057' in str(e) or '网络' in str(e):
+                        sys.stdout.write('\n')
+                        sys.stdout.write("  网络断连，正在重连 BaoStock ...\n")
+                        sys.stdout.flush()
+                        try:
+                            bs.logout()
+                        except Exception:
+                            pass
+                        _bs_login()
+                        try:
+                            _update_cache(code, begin_time)
+                        except Exception as e2:
+                            print(f"  {code} 缓存失败（重连后）：{e2}")
+                    else:
+                        sys.stdout.write('\n')
+                        print(f"  {code} 缓存失败：{e}")
             print(f"\r  缓存更新完成{' ' * 40}")
             # 登录期间顺带查询全部股票名称
             sys.stdout.write("  正在查询股票名称 ...")
@@ -246,7 +284,7 @@ def run_scan_pool(pool_file, begin_time, end_time, lv_list, config, days=30, boa
             bs.logout()
     else:
         print("全部命中本地缓存，正在查询股票名称 ...")
-        bs.login()
+        _bs_login()
         try:
             name_map = _fetch_stock_names(codes)
         finally:
@@ -261,6 +299,12 @@ def run_scan_pool(pool_file, begin_time, end_time, lv_list, config, days=30, boa
         for i, code in enumerate(codes, 1):
             _print_progress(i, len(codes), code, start_time)
             try:
+                # 数据行数过少（退市/长期停牌），跳过避免缠论计算报错
+                cache_file = os.path.join(_CACHE_DIR, f"{code}_day.csv")
+                with open(cache_file, 'r', encoding='utf-8') as _f:
+                    row_count = sum(1 for _ in _f) - 1  # 去掉标题行
+                if row_count < 30:
+                    continue
                 chan = CChan(
                     code=code, begin_time=begin_time, end_time=end_time,
                     data_src=DATA_SRC.CSV, lv_list=lv_list, config=config,
