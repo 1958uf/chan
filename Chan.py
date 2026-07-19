@@ -182,6 +182,9 @@ class CChan:
         elif self.data_src == DATA_SRC.AKSHARE:
             from DataAPI.AkshareAPI import CAkshare
             _dict[DATA_SRC.AKSHARE] = CAkshare
+        elif self.data_src == DATA_SRC.SQLITE:
+            from DataAPI.SQLiteAPI import SQLite_API
+            _dict[DATA_SRC.SQLITE] = SQLite_API
         if self.data_src in _dict:
             return _dict[self.data_src]
         assert isinstance(self.data_src, str)

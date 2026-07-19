@@ -7,6 +7,7 @@ class DATA_SRC(Enum):
     CCXT = auto()
     CSV = auto()
     AKSHARE = auto()
+    SQLITE = auto()  # 本地 SQLite 缓存数据源（chan.db）
 
 
 class KL_TYPE(Enum):

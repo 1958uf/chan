@@ -7,12 +7,13 @@ import baostock as bs
 from Chan import CChan
 from ChanConfig import CChanConfig
 from Common.CEnum import AUTYPE, DATA_SRC, KL_TYPE
-from DataAPI.csvAPI import CSV_API
+from DataAPI.SQLiteAPI import SQLite_API
+from DataAPI.sqlite_cache import ChanSqliteCache
 from Plot.AnimatePlotDriver import CAnimateDriver
 from Plot.PlotDriver import CPlotDriver
 
-# 本地 K 线缓存目录（存放 {code}_day.csv，供 /scan 增量复用）
-_CACHE_DIR = "chan_cache"
+# 本地 K 线缓存数据库文件（chan.db，供 /scan 增量复用；替代原 CSV 缓存层）
+_DB_PATH = "chan.db"
 
 
 def _bs_login(max_retry: int = 3) -> None:
@@ -56,62 +57,28 @@ def _last_business_day():
 
 
 def _needs_cache_update(code: str) -> bool:
-    """检查股票缓存是否需要更新（文件不存在 or 最后一条数据日期 < 上一个交易日）"""
-    cache_file = os.path.join(_CACHE_DIR, f"{code}_day.csv")
-    if not os.path.exists(cache_file):
-        return True
-    with open(cache_file, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-    if len(lines) <= 1:  # 只有标题行或空文件
-        return True
-    last_date_str = lines[-1].strip().split(',')[0]
-    return last_date_str < _last_business_day().isoformat()
+    """检查股票缓存是否需要更新（无数据 or 最后一条数据日期 < 最近交易日）"""
+    with ChanSqliteCache(_DB_PATH) as _cache:
+        return _cache.needs_update(code)
 
 
 def _update_cache(code: str, begin_time: str) -> None:
-    """增量（或全量）更新 chan_cache/{code}_day.csv。
+    """增量（或全量）更新 SQLite 缓存 chan.db 中该股票的日线数据。
     输入：
         code       - 归一化后的股票代码，如 sh.600519
         begin_time - 全量拉取的起始日期，如 "2024-01-01"
     输出：
-        在 _CACHE_DIR 目录下写入/追加 {code}_day.csv（格式：time,open,high,low,close）
+        无（数据写入 chan.db 的 kline 表，含 volume/turnover/turnrate 字段）
+    说明：
+        - 已假定调用前已完成 BaoStock 登录（bs_login）
+        - 增量起点：已有数据则从次日起，否则用 begin_time 全量
+        - 单事务写入，保证原子性；INSERT OR REPLACE 天然去重
     """
-    from datetime import date, timedelta
-
-    os.makedirs(_CACHE_DIR, exist_ok=True)
-    cache_file = os.path.join(_CACHE_DIR, f"{code}_day.csv")
-    append = False
-    start = begin_time
-
-    if os.path.exists(cache_file):
-        with open(cache_file, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-        if len(lines) > 1:
-            last_date = lines[-1].strip().split(',')[0]
-            start = (date.fromisoformat(last_date) + timedelta(days=1)).isoformat()
-            append = True
-
-    rs = bs.query_history_k_data_plus(
-        code=code,
-        fields="date,open,high,low,close",
-        start_date=start,
-        end_date=None,
-        frequency='d',
-        adjustflag='2',  # 前复权，与 AUTYPE.QFQ 对应
-    )
-    if rs.error_code != '0':
-        raise Exception(rs.error_msg)
-
-    mode = 'a' if append else 'w'
-    with open(cache_file, mode, encoding='utf-8') as f:
-        if not append:
-            f.write("time,open,high,low,close\n")
-        while rs.next():
-            row = rs.get_row_data()
-            # 跳过 OHLC 任一字段为空的行（停牌日 BaoStock 返回空字符串，会导致缠论计算越界）
-            if any(v == '' for v in row[1:]):
-                continue
-            f.write(','.join(row) + '\n')
+    cache = ChanSqliteCache(_DB_PATH)
+    try:
+        cache.update(code, begin_time, autype=AUTYPE.QFQ, k_type="day")
+    finally:
+        cache.close()
 
 
 def _print_progress(i: int, total: int, code: str, start_time: float) -> None:
@@ -192,20 +159,39 @@ def run_terminal_query(code, begin_time, end_time, data_src, lv_list, config):
 
 
 def _fetch_stock_names(codes: list) -> dict:
-    """批量查询股票名称（需在 BaoStock 登录状态下调用）。
+    """批量查询股票名称（缺省时需在 BaoStock 登录状态下调用）。
     输入：
         codes - 归一化代码列表，如 ['sh.600519', 'sz.000001']
     输出：
         {code: name} 字典，查询失败时对应 code 映射为空字符串
+    说明：
+        - 优先从本地 stock_meta 读取（命中即跳过网络）
+        - 仅对缺失的 code 调用 BaoStock query_stock_basic，并回写 stock_meta
     """
-    code_set = set(codes)
-    name_map = {c: '' for c in codes}
-    # 一次性拉取全市场基本信息，避免逐只查询导致 543 次 API 调用
+    cache = ChanSqliteCache(_DB_PATH)
+    try:
+        name_map = cache.get_stock_names(codes)
+    finally:
+        cache.close()
+
+    # 找出本地缺失的 code，走 BaoStock 补齐
+    missing = [c for c in codes if not name_map.get(c)]
+    if not missing:
+        return name_map
+
+    missing_set = set(missing)
+    # 一次性拉取全市场基本信息，避免逐只查询导致大量 API 调用
     rs = bs.query_stock_basic()
-    while rs.error_code == '0' and rs.next():
-        row = rs.get_row_data()  # [code, code_name, ipoDate, outDate, stock_type, status]
-        if row[0] in code_set:
-            name_map[row[0]] = row[1]
+    cache = ChanSqliteCache(_DB_PATH)
+    try:
+        while rs.error_code == '0' and rs.next():
+            row = rs.get_row_data()  # [code, code_name, ipoDate, outDate, stock_type, status]
+            if row[0] in missing_set:
+                name_map[row[0]] = row[1]
+                # 回写本地缓存，下次免网络
+                cache.upsert_stock_meta(row[0], row[1], board=get_board(row[0]))
+    finally:
+        cache.close()
     return name_map
 
 
@@ -291,8 +277,8 @@ def run_scan_pool(pool_file, begin_time, end_time, lv_list, config, days=30, boa
             bs.logout()
         print(f"股票名称查询完成")
 
-    # === 阶段2：从本地 CSV 缓存计算缠论买卖点 ===
-    CSV_API.base_dir = os.path.abspath(_CACHE_DIR)
+    # === 阶段2：从本地 SQLite 缓存计算缠论买卖点 ===
+    SQLite_API.db_path = os.path.abspath(_DB_PATH)
     try:
         results = []
         start_time = time.time()
@@ -300,14 +286,16 @@ def run_scan_pool(pool_file, begin_time, end_time, lv_list, config, days=30, boa
             _print_progress(i, len(codes), code, start_time)
             try:
                 # 数据行数过少（退市/长期停牌），跳过避免缠论计算报错
-                cache_file = os.path.join(_CACHE_DIR, f"{code}_day.csv")
-                with open(cache_file, 'r', encoding='utf-8') as _f:
-                    row_count = sum(1 for _ in _f) - 1  # 去掉标题行
+                cache = ChanSqliteCache(_DB_PATH)
+                try:
+                    row_count = cache.row_count(code, k_type="day")
+                finally:
+                    cache.close()
                 if row_count < 30:
                     continue
                 chan = CChan(
                     code=code, begin_time=begin_time, end_time=end_time,
-                    data_src=DATA_SRC.CSV, lv_list=lv_list, config=config,
+                    data_src=DATA_SRC.SQLITE, lv_list=lv_list, config=config,
                 )
                 kl_data = chan[0]
                 for bsp in kl_data.bs_point_lst.bsp_iter():
@@ -329,7 +317,7 @@ def run_scan_pool(pool_file, begin_time, end_time, lv_list, config, days=30, boa
                 sys.stdout.write('\n')
                 print(f"  {code} 失败：{e}")
     finally:
-        CSV_API.base_dir = None  # 恢复默认，不影响单只查询
+        SQLite_API.do_close()  # 关闭 SQLite 连接，不影响单只查询
 
     _TYPE_ORDER = {'1': 0, '1p': 1, '2': 2, '2s': 3, '3a': 4, '3b': 5}
     results.sort(key=lambda r: (r['time'], _TYPE_ORDER.get(r['raw_type'], 99)))
@@ -434,12 +422,11 @@ if __name__ == "__main__":
             elif user_input.lower().startswith('/scan'):
                 parts = user_input.lower().split()
                 if '-clearcache' in parts:
-                    import shutil
-                    if os.path.exists(_CACHE_DIR):
-                        shutil.rmtree(_CACHE_DIR)
-                        print("缓存已清空，下次扫描将重新拉取全量数据。")
+                    if os.path.exists(_DB_PATH):
+                        os.remove(_DB_PATH)
+                        print("缓存数据库已清空，下次扫描将重新拉取全量数据。")
                     else:
-                        print("无缓存目录，无需清理。")
+                        print("无缓存数据库，无需清理。")
                     continue
                 board_filter = None
                 if '-zhuban' in parts:
@@ -463,11 +450,11 @@ if __name__ == "__main__":
                             bs.logout()
                     else:
                         print("命中本地缓存，跳过网络请求。")
-                    # 从本地 CSV 缓存读取并计算缠论
-                    CSV_API.base_dir = os.path.abspath(_CACHE_DIR)
+                    # 从本地 SQLite 缓存读取并计算缠论
+                    SQLite_API.db_path = os.path.abspath(_DB_PATH)
                     try:
-                        run_terminal_query(query_code, begin_time, end_time, DATA_SRC.CSV, lv_list, config)
+                        run_terminal_query(query_code, begin_time, end_time, DATA_SRC.SQLITE, lv_list, config)
                     finally:
-                        CSV_API.base_dir = None  # 恢复默认，不影响其他逻辑
+                        SQLite_API.do_close()  # 关闭连接，不影响其他逻辑
                 except Exception as e:
                     print(f"查询失败：{e}")
