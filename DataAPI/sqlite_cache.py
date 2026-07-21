@@ -129,6 +129,14 @@ class ChanSqliteCache:
             self._conn.close()
             self._conn = None
 
+    def __enter__(self) -> "ChanSqliteCache":
+        """支持 with 语句，返回自身。"""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """退出 with 语句时自动关闭连接。"""
+        self.close()
+
     # ------------------------------------------------------------------
     # 查询类
     # ------------------------------------------------------------------

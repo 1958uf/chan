@@ -285,7 +285,7 @@ def run_scan_pool(pool_file, begin_time, end_time, lv_list, config, days=30, boa
         for i, code in enumerate(codes, 1):
             _print_progress(i, len(codes), code, start_time)
             try:
-                # 数据行数过少（退市/长期停牌），跳过避免缠论计算报错
+                # 数据行数过少，跳过避免缠计算报错
                 cache = ChanSqliteCache(_DB_PATH)
                 try:
                     row_count = cache.row_count(code, k_type="day")
