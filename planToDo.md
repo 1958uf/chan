@@ -12,6 +12,7 @@
 本次重构把项目演进为 **「通用行情数据底座 + 公共基础设施 + 多策略（含缠论）+ 统一回测引擎」** 的框架，使长期开发多种非缠论策略（均线、动量、配对等）并回测时，策略间互不耦合、数据层纯净、回测统一。
 
 ### 用户已确认的设计选择
+
 1. **OHLCV 载体**：`dataclass` 定义 `KBar`（不绑定 pandas）
 2. **缠论彻底去特权化**：`Chan.py` + `ChanConfig.py` + `KLine/Bi/Seg/ZS/BuySellPoint/Combiner/ChanModel/` + `Plot/` + `Debug/` **全部移入 `Strategies/chan/`**
 3. **公共层**：`Common/`、`Math/` 留在框架公共层（含通用指标 RSI/MACD 等，非缠论策略也可用）
@@ -193,6 +194,7 @@ def autofix_for(data_src) -> bool:
 > **CTime 语义澄清**（核对 `Common/CTime.py` 后）：`CTime(..., auto=True)` 仅在 `hour==0 且 minute==0` 时把 `ts` 设为当日 23:59，否则用真实时分。`KBar.time` 的 `datetime` 转换时统一传 `auto=True`：日线（时分为 0）自动对齐到 23:59，分钟级别用真实时分——与原数据源直接构造 `CKLine_Unit` 的行为一致。
 
 **缠论迁移要点**（`Strategies/chan/` 内）：
+
 - `Chan.py` 的 `load_stock_data()` 改为遍历 `get_kl_data()` 的 KBar，经 `kbar_to_klu_dict` 转 `CKLine_Unit`（约 5 行变化，autofix 取自 `autofix_for(self.data_src)`）
 - **缠论内部模块间 import 改造**：内部相互引用从绝对路径改为**包内相对路径**。例如：
   - `Chan.py`：`from KLine.KLine_List import ...` → `from .KLine.KLine_List import ...`
@@ -211,6 +213,7 @@ def autofix_for(data_src) -> bool:
 ### 第 4 层：Backtest（统一回测引擎）
 
 **`Backtest/engine.py`** —— 事件驱动逐 K 线推进：
+
 ```python
 class CBacktestEngine:
     """统一回测引擎。
@@ -266,37 +269,41 @@ class ChanStrategyAdapter(CStrategy):
 ## 关键文件改动清单
 
 ### 新增文件
-| 文件 | 作用 |
-|---|---|
-| `DataBasis/*`（kbar/stock_api/data_factory + 5 个数据源 + sqlite_cache + __init__） | 纯净行情底座 |
-| `Strategies/base.py`、`registry.py`、`__init__.py` | 策略接口契约 + 注册表 |
-| `Strategies/chan/chan_adapter.py` | KBar→CKLine_Unit 适配 + `ChanStrategyAdapter` 回测桥接 |
-| `Strategies/chan/README.md`、`Strategies/example_ma/*` | 缠论说明 + 非缠论示例 |
-| `Backtest/{engine,broker,portfolio,metrics}.py` + `README.md` | 统一回测引擎 |
-| `cli.py` | 多策略统一 CLI |
-| `Strategies/chan/` 下所有子目录的 `__init__.py` | 包化所需（原目录无） |
+
+| 文件                                                                                        | 作用                                                     |
+| ------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `DataBasis/*`（kbar/stock_api/data_factory + 5 个数据源 + sqlite_cache + __init__） | 纯净行情底座                                             |
+| `Strategies/base.py`、`registry.py`、`__init__.py`                                    | 策略接口契约 + 注册表                                    |
+| `Strategies/chan/chan_adapter.py`                                                         | KBar→CKLine_Unit 适配 +`ChanStrategyAdapter` 回测桥接 |
+| `Strategies/chan/README.md`、`Strategies/example_ma/*`                                  | 缠论说明 + 非缠论示例                                    |
+| `Backtest/{engine,broker,portfolio,metrics}.py` + `README.md`                           | 统一回测引擎                                             |
+| `cli.py`                                                                                  | 多策略统一 CLI                                           |
+| `Strategies/chan/` 下所有子目录的 `__init__.py`                                         | 包化所需（原目录无）                                     |
 
 ### 迁移文件（移动 + import 改写 + 补 __init__.py）
-| 原位置 | 新位置 | 改动 |
-|---|---|---|
-| `Chan.py`、`ChanConfig.py` | `Strategies/chan/` | 内部 import 改相对路径；`load_stock_data` 接适配器 |
-| `KLine/ Bi/ Seg/ ZS/ BuySellPoint/ Combiner/ ChanModel/` | `Strategies/chan/` 下同名目录 | 模块间 import 改相对路径（对 Common/Math 保持绝对）；补 `__init__.py` |
-| `Plot/` | `Strategies/chan/Plot/` | 对缠论模块 import 改相对路径；补 `__init__.py` |
-| `Debug/strategy_demo*.py` | `Strategies/chan/examples/` | import 路径更新（`from Chan` → `from Strategies.chan.Chan`，`from ChanModel` → `from Strategies.chan.ChanModel` 等） |
+
+| 原位置                                                     | 新位置                          | 改动                                                                                                                           |
+| ---------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `Chan.py`、`ChanConfig.py`                             | `Strategies/chan/`            | 内部 import 改相对路径；`load_stock_data` 接适配器                                                                           |
+| `KLine/ Bi/ Seg/ ZS/ BuySellPoint/ Combiner/ ChanModel/` | `Strategies/chan/` 下同名目录 | 模块间 import 改相对路径（对 Common/Math 保持绝对）；补`__init__.py`                                                         |
+| `Plot/`                                                  | `Strategies/chan/Plot/`       | 对缠论模块 import 改相对路径；补`__init__.py`                                                                                |
+| `Debug/strategy_demo*.py`                                | `Strategies/chan/examples/`   | import 路径更新（`from Chan` → `from Strategies.chan.Chan`，`from ChanModel` → `from Strategies.chan.ChanModel` 等） |
 
 ### 修改文件
-| 文件 | 改动 |
-|---|---|
-| `main.py` | 缠论 import 路径更新（`from Chan` → `from Strategies.chan.Chan`，`from ChanConfig` → `from Strategies.chan.ChanConfig`，`from Plot.*` → `from Strategies.chan.Plot.*`）；`DataAPI` 相关 import 不变 |
-| `App/ashare_bsp_scanner_gui.py` | 同上，缠论 import 路径更新 |
-| `DataAPI/CommonStockAPI.py` | 继承 `DataBasis.CStockApi`，加 `get_kl_data_legacy` |
-| `DataAPI/BaoStockAPI.py`、`AkshareAPI.py`、`ccxt.py`、`csvAPI.py`、`SQLiteAPI.py` | 委托 `DataBasis` 实现，保留类名 |
-| `DataAPI/sqlite_cache.py` | 转发 `DataBasis.sqlite_cache` |
-| `Script/migrate_csv_to_sqlite.py` | `sqlite_cache` import 源改为 `DataBasis`（或经 `DataAPI` 兼容层，二者皆可） |
-| `arch.md` | 同步更新分层架构说明 |
-| `run.bat` | 不变（仍 `python main.py`）；`setup_env.sh` 验证项不变 |
+
+| 文件                                                                                        | 改动                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `main.py`                                                                                 | 缠论 import 路径更新（`from Chan` → `from Strategies.chan.Chan`，`from ChanConfig` → `from Strategies.chan.ChanConfig`，`from Plot.*` → `from Strategies.chan.Plot.*`）；`DataAPI` 相关 import 不变 |
+| `App/ashare_bsp_scanner_gui.py`                                                           | 同上，缠论 import 路径更新                                                                                                                                                                                           |
+| `DataAPI/CommonStockAPI.py`                                                               | 继承`DataBasis.CStockApi`，加 `get_kl_data_legacy`                                                                                                                                                               |
+| `DataAPI/BaoStockAPI.py`、`AkshareAPI.py`、`ccxt.py`、`csvAPI.py`、`SQLiteAPI.py` | 委托`DataBasis` 实现，保留类名                                                                                                                                                                                     |
+| `DataAPI/sqlite_cache.py`                                                                 | 转发`DataBasis.sqlite_cache`                                                                                                                                                                                       |
+| `Script/migrate_csv_to_sqlite.py`                                                         | `sqlite_cache` import 源改为 `DataBasis`（或经 `DataAPI` 兼容层，二者皆可）                                                                                                                                    |
+| `arch.md`                                                                                 | 同步更新分层架构说明                                                                                                                                                                                                 |
+| `run.bat`                                                                                 | 不变（仍`python main.py`）；`setup_env.sh` 验证项不变                                                                                                                                                            |
 
 ### 不动的文件
+
 - `Common/`、`Math/`（内容、位置全不变）
 - `monitor/`、`pool/`、`doc/`、`Image/`、`chan.db`
 - `stock_pool.txt`、`debug.log`、`LICENSE`
@@ -358,6 +365,7 @@ class ChanStrategyAdapter(CStrategy):
 ## 风险与回滚
 
 ### 主要风险
+
 1. **相对 import 改写遗漏**：缠论模块间引用密集（`KLine_List` 引 `Bi/Seg/ZS/BuySellPoint/Combiner`，`Seg` 引 `Bi/Combiner`，`ZS` 引 `Bi/Seg/BuySellPoint` 等），批量替换易漏。**对策**：改完后用 `python -c "import Strategies.chan.Chan"` 逐层验证，配合 `grep -rE "from (KLine|Bi|Seg|ZS|BuySellPoint|Combiner|ChanModel|Chan) " Strategies/chan/` 确认无残留绝对路径。
 2. **`ChanModel` 遗漏导致 `BS_Point` import 失败**：买卖点模块是缠论核心依赖链末端，遗漏会连锁失败。**对策**：步骤 3 完成后立即跑 `python -c "from Strategies.chan.BuySellPoint.BS_Point import CBS_Point"`。
 3. **`CTime` auto 语义误用**：若适配层对分钟级别也传 `auto=False` 或截断错误，多级别对齐会错乱（日线 ts 变成 00:00 而非 23:59）。**对策**：统一传 `auto=True`，并用单股日线用例对比重构前后 `klu.time.ts` 一致。
@@ -365,6 +373,7 @@ class ChanStrategyAdapter(CStrategy):
 5. **回测-缠论桥接语义偏差**：`trigger_step` 喂入的是 `CKLine_Unit`，而 `on_bar` 拿到的是 `KBar`，中间转换若 autofix/时间不一致会导致缠论计算结果与直接运行 `CChan` 不同。**对策**：步骤 9 用同一股票、同一时段对比 `ChanStrategyAdapter` 回测的买卖点与 `CChan` 直跑的买卖点一致。
 
 ### 回滚策略
+
 - 每个步骤独立提交（git），任一步骤验证失败可 `git revert` 单步回滚。
 - 步骤 3（缠论迁移）是最大风险点，建议在独立分支进行，回归通过后再合并。
 - 兼容层 `DataAPI/` 保证旧代码路径始终可用，即便新层出问题也不影响 `main.py` 运行。
