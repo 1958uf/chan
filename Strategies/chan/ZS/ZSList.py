@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import List, Union, overload
 
-from Bi.Bi import CBi
-from Bi.BiList import CBiList
+from ..Bi.Bi import CBi
+from ..Bi.BiList import CBiList
 from Common.func_util import revert_bi_dir
-from Seg.Seg import CSeg
-from Seg.SegListComm import CSegListComm
-from ZS.ZSConfig import CZSConfig
+from ..Seg.Seg import CSeg
+from ..Seg.SegListComm import CSegListComm
+from ..ZS.ZSConfig import CZSConfig
 
 from .ZS import CZS
 

@@ -1,8 +1,8 @@
 import abc
 from typing import Generic, List, TypeVar, Union, overload
 
-from Bi.Bi import CBi
-from Bi.BiList import CBiList
+from ..Bi.Bi import CBi
+from ..Bi.BiList import CBiList
 from Common.CEnum import BI_DIR, LEFT_SEG_METHOD, SEG_TYPE
 from Common.ChanException import CChanException, ErrCode
 

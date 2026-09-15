@@ -1,5 +1,5 @@
-from Chan import CChan
-from ChanConfig import CChanConfig
+from ..Chan import CChan
+from ..ChanConfig import CChanConfig
 from Common.CEnum import AUTYPE, DATA_SRC, KL_TYPE
 from DataAPI.BaoStockAPI import CBaoStock
 

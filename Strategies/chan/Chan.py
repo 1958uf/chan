@@ -5,15 +5,17 @@ import sys
 from collections import defaultdict
 from typing import Dict, Iterable, List, Optional, Union
 
-from BuySellPoint.BS_Point import CBS_Point
-from ChanConfig import CChanConfig
+from .BuySellPoint.BS_Point import CBS_Point
+from .ChanConfig import CChanConfig
 from Common.CEnum import AUTYPE, DATA_SRC, KL_TYPE
 from Common.ChanException import CChanException, ErrCode
 from Common.CTime import CTime
 from Common.func_util import check_kltype_order, kltype_lte_day
-from DataAPI.CommonStockAPI import CCommonStockApi
-from KLine.KLine_List import CKLine_List
-from KLine.KLine_Unit import CKLine_Unit
+from DataBasis.data_factory import create_data_api
+from DataBasis.stock_api import CStockApi
+from .chan_adapter import autofix_for, kbar_to_klu
+from .KLine.KLine_List import CKLine_List
+from .KLine.KLine_Unit import CKLine_Unit
 
 
 class CChan:
@@ -87,8 +89,15 @@ class CChan:
         for idx in range(len(self.lv_list)):
             self.kl_datas[self.lv_list[idx]] = CKLine_List(self.lv_list[idx], conf=self.conf)
 
-    def load_stock_data(self, stockapi_instance: CCommonStockApi, lv) -> Iterable[CKLine_Unit]:
-        for KLU_IDX, klu in enumerate(stockapi_instance.get_kl_data()):
+    def load_stock_data(self, stockapi_instance: CStockApi, lv) -> Iterable[CKLine_Unit]:
+        """遍历数据源的 KBar，经适配器转为 CKLine_Unit。
+        功能：把纯净 KBar 转为缠论 K 线单元，autofix 取自数据源设定
+        输入：stockapi_instance - DataBasis 数据源实例（返回 KBar）；lv - 当前级别
+        输出：Iterable[CKLine_Unit]
+        """
+        autofix = autofix_for(self.data_src)
+        for KLU_IDX, kbar in enumerate(stockapi_instance.get_kl_data()):
+            klu = kbar_to_klu(kbar, autofix=autofix)
             klu.set_idx(KLU_IDX)
             klu.kl_type = lv
             yield klu
@@ -169,32 +178,11 @@ class CChan:
         return lv_klu_iter
 
     def GetStockAPI(self):
-        _dict = {}
-        if self.data_src == DATA_SRC.BAO_STOCK:
-            from DataAPI.BaoStockAPI import CBaoStock
-            _dict[DATA_SRC.BAO_STOCK] = CBaoStock
-        elif self.data_src == DATA_SRC.CCXT:
-            from DataAPI.ccxt import CCXT
-            _dict[DATA_SRC.CCXT] = CCXT
-        elif self.data_src == DATA_SRC.CSV:
-            from DataAPI.csvAPI import CSV_API
-            _dict[DATA_SRC.CSV] = CSV_API
-        elif self.data_src == DATA_SRC.AKSHARE:
-            from DataAPI.AkshareAPI import CAkshare
-            _dict[DATA_SRC.AKSHARE] = CAkshare
-        elif self.data_src == DATA_SRC.SQLITE:
-            from DataAPI.SQLiteAPI import SQLite_API
-            _dict[DATA_SRC.SQLITE] = SQLite_API
-        if self.data_src in _dict:
-            return _dict[self.data_src]
-        assert isinstance(self.data_src, str)
-        if self.data_src.find("custom:") < 0:
-            raise CChanException("load src type error", ErrCode.SRC_DATA_TYPE_ERR)
-        package_info = self.data_src.split(":")[1]
-        package_name, cls_name = package_info.split(".")
-        import importlib
-        module = importlib.import_module(f"DataAPI.{package_name}")
-        return getattr(module, cls_name)
+        """返回数据源类（返回 KBar 的 DataBasis 实现）。
+        功能：通过 DataBasis 工厂获取数据源类，与 DataAPI 兼容层解耦
+        输出：CStockApi 子类
+        """
+        return create_data_api(self.data_src)
 
     def load(self, step=False):
         stockapi_cls = self.GetStockAPI()

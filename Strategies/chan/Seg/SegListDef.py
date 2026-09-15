@@ -1,4 +1,4 @@
-from Bi.BiList import CBiList
+from ..Bi.BiList import CBiList
 from Common.CEnum import SEG_TYPE
 
 from .SegConfig import CSegConfig

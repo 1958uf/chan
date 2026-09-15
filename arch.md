@@ -1,88 +1,132 @@
 # Chan 项目架构说明
 
-> 本文档记录 `Chan`（缠论量化分析框架）项目的目录结构与整体架构，便于快速了解项目组织与数据流。
+> 本文档记录 `Chan` 项目的目录结构与整体架构，便于快速了解项目组织与数据流。
+> 版本：v2（2026-09-15，重构为「通用行情数据底座 + 多策略 + 统一回测框架」）
 
 ## 一、项目整体定位
 
-这是一个基于"缠论"（缠中说禅技术分析理论）的 Python 量化分析框架，项目名 `chan.py`。它实现了完整的缠论分析链路：从行情数据获取，到 K 线合并、分型识别、笔/线段/中枢/买卖点的自动计算，再到可视化绘图和回测策略演示。当前项目在此基础上还做了一层"实盘辅助"封装——SQLite 缓存、批量扫描股票池、均线接近监控告警。
+本项目是一个 Python 量化分析框架，演进为 **「通用行情数据底座 + 公共基础设施 + 多策略（含缠论）+ 统一回测引擎」** 的分层架构：
 
-- 核心模型语言：Python 3.11，conda 环境名 `chan_py311`
+- **DataBasis**：纯净行情数据底座（零缠论依赖），所有数据源返回纯 `KBar`（OHLCV）
+- **Common/Math**：框架级公共基础设施（枚举/时间/异常/通用指标）
+- **Strategies**：策略层，所有策略平级（缠论是其中一个策略，已去特权化）
+- **Backtest**：统一回测引擎，与缠论完全解耦
+- **DataAPI**：兼容层，委托 DataBasis，旧调用零改动
+
+- 运行环境：Python 3.11，conda 环境名 `chan_py311`
 - 主数据源：BaoStock（A 股日线），另支持 akshare、ccxt（数字货币）、CSV、本地 SQLite 缓存
-- 入口：`main.py`（终端批量扫描/单股查询）、`App/ashare_bsp_scanner_gui.py`（PyQt6 GUI）、`monitor/run.py`（均线接近监控）
+- 入口：`main.py`（缠论扫描，向后兼容）、`cli.py`（多策略统一 CLI）、`App/ashare_bsp_scanner_gui.py`（PyQt6 GUI）、`monitor/run.py`（均线接近监控）
 
-## 二、各目录职责
+## 二、分层架构
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 入口层：main.py / cli.py / App / monitor            │
+├─────────────────────────────────────────────────────┤
+│ Backtest/   统一回测引擎（零缠论依赖）               │
+│ Strategies/ 策略层（chan/example_ma/... 平级）       │
+├─────────────────────────────────────────────────────┤
+│ Common/  Math/   公共基础设施（通用指标/枚举/时间）   │
+│ DataBasis/       纯净行情底座（零缠论依赖，返回KBar）│
+│ DataAPI/         兼容层（委托 DataBasis，返回CKLine_Unit）│
+└─────────────────────────────────────────────────────┘
+```
+
+### 分层依赖约束
+
+- **DataBasis**：只依赖 `Common`，零缠论依赖，产出纯 `KBar`
+- **Backtest**：只依赖 `DataBasis` + `Strategies.base`，零缠论依赖
+- **Strategies.base/example_ma**：只依赖 `DataBasis` + `Common/Math`，不依赖缠论内部
+- **Strategies.chan**：依赖 `DataBasis`（经 `chan_adapter` 转 `CKLine_Unit`）+ `Common/Math`
+- **DataAPI（兼容层）**：委托 `DataBasis`，经适配器返回 `CKLine_Unit`，供旧代码使用
+
+## 三、各目录职责
 
 | 目录 | 职责 | 关键文件 |
 |---|---|---|
-| **根目录** | 核心引擎类与全局入口/配置 | `Chan.py`、`ChanConfig.py`、`main.py`、`run.bat`、`setup_env.sh`、`chan.db`（SQLite 缓存库，约 78MB） |
-| **App** | 独立应用入口（GUI） | `ashare_bsp_scanner_gui.py`（PyQt6 A 股买点扫描器，批量扫描并可视化 K 线/笔/线段/中枢/买卖点/MACD） |
-| **Bi** | "笔"的模型与算法 | `Bi.py`（`CBi` 笔类）、`BiList.py`（笔列表管理）、`BiConfig.py`（笔算法/严格度/分型校验配置） |
-| **BuySellPoint** | 买卖点识别 | `BS_Point.py`（买卖点类）、`BSPointList.py`（含一/二/三类买卖点）、`BSPointConfig.py`（背驰率、最小中枢数等配置） |
-| **ChanModel** | 机器学习/特征工程层 | `Features.py`（特征字典容器，供买卖点附带特征） |
-| **Combiner** | K 线合并（含处理）引擎 | `KLine_Combiner.py`（泛型合并器，含分型判定）、`Combine_Item.py`（统一提取笔/K线单元/线段的高低价与时间） |
-| **Common** | 公共基础设施 | `CEnum.py`（数据源/级别/方向/买卖点类型等枚举）、`ChanException.py`、`CTime.py`、`func_util.py`（级别校验、区间重叠）、`cache.py`（memoize 装饰器） |
-| **DataAPI** | 行情数据源抽象与各实现 | `CommonStockAPI.py`（抽象基类）、`BaoStockAPI.py`、`AkshareAPI.py`、`ccxt.py`（数字货币）、`csvAPI.py`、`SQLiteAPI.py`、`sqlite_cache.py`（chan.db 增量缓存管理，替代旧 CSV 缓存层） |
-| **Debug** | 策略/回测示例 | `strategy_demo.py` ~ `strategy_demo6.py`（演示用 `CChan` + `trigger_step` 做逐步回测） |
-| **KLine** | K 线对象与多级别管理 | `KLine_Unit.py`（单根 K 线，挂载 MACD/BOLL/RSI/KDJ/Demark）、`KLine.py`（合并后 K 线）、`KLine_List.py`（单级别 K 线容器，串联 笔/线段/中枢/买卖点）、`TradeInfo.py` |
-| **Math** | 技术指标计算 | `MACD.py`、`BOLL.py`、`RSI.py`、`KDJ.py`、`Demark.py`（TD 序列）、`TrendLine.py`、`TrendModel.py` |
+| **DataBasis** | 【纯净行情底座】零缠论依赖，返回 KBar | `kbar.py`（KBar dataclass）、`stock_api.py`（CStockApi 抽象基类）、`data_factory.py`（工厂）、`baostock_api.py`/`akshare_api.py`/`ccxt_api.py`/`csv_api.py`/`sqlite_api.py`（各数据源，返回 KBar）、`sqlite_cache.py`（chan.db 缓存管理） |
+| **Common** | 公共基础设施 | `CEnum.py`（数据源/级别/方向/买卖点类型等枚举）、`ChanException.py`、`CTime.py`、`func_util.py`（级别校验、区间重叠、str2float）、`cache.py`（memoize 装饰器） |
+| **Math** | 通用技术指标（非缠论策略也可用） | `MACD.py`、`BOLL.py`、`RSI.py`、`KDJ.py`、`Demark.py`（TD 序列）、`TrendLine.py`、`TrendModel.py` |
+| **Strategies** | 【策略层】所有策略平级 | `base.py`（CStrategy 抽象基类）、`registry.py`（策略注册表） |
+| **Strategies/chan** | 缠论策略（从根目录迁入，去特权化） | `Chan.py`（CChan 核心引擎）、`ChanConfig.py`、`chan_adapter.py`（KBar→CKLine_Unit 适配）、`chan_strategy.py`（缠论回测适配器）、`KLine/`、`Bi/`、`Seg/`、`ZS/`、`BuySellPoint/`、`Combiner/`、`ChanModel/`、`Plot/`、`examples/` |
+| **Strategies/example_ma** | 非缠论策略示例（均线策略，只依赖 DataBasis+Math） | `ma_strategy.py`（SMA 金叉/死叉） |
+| **Backtest** | 【统一回测引擎】零缠论依赖 | `engine.py`（事件驱动逐 K 线）、`broker.py`（撮合/持仓/资金）、`portfolio.py`（资产组合/回测结果）、`metrics.py`（胜率/回撤/夏普） |
+| **DataAPI** | 【兼容层】委托 DataBasis，旧调用零改动 | `CommonStockAPI.py`（CCommonStockApi + get_kl_data 返回 CKLine_Unit）、`BaoStockAPI.py`/`AkshareAPI.py`/`ccxt.py`/`csvAPI.py`/`SQLiteAPI.py`（委托 DataBasis）、`sqlite_cache.py`（转发 DataBasis.sqlite_cache） |
+| **App** | 独立应用入口（GUI） | `ashare_bsp_scanner_gui.py`（PyQt6 A 股买点扫描器） |
 | **monitor** | 独立的均线接近监控告警系统（与缠论主程序解耦） | `run.py`（CLI 入口，eod/live 两模式）、`data_source.py`、`indicators.py`、`alerts.py`、`config.yaml`、`watchlist.txt` |
-| **Plot** | 可视化绘图 | `PlotDriver.py`（matplotlib 静态图）、`AnimatePlotDriver.py`（逐 K 线动画）、`PlotMeta.py`（绘图元数据适配） |
 | **pool** | 股票池文本 | `pool.txt`、`ai_pool.txt`、`优标.txt`、`check_code2name.txt` |
 | **Script** | 运维脚本 | `migrate_csv_to_sqlite.py`（旧 CSV 缓存迁移到 chan.db）、`requirements.txt` |
-| **Seg** | "线段"模型与多种线段算法 | `Seg.py`、`SegConfig.py`、`SegListChan.py`（缠论正宗分型特征算法）、`SegListDYH.py`（1+1，弃用）、`SegListDef.py`（break，弃用）、`Eigen.py`（特征序列分型）、`EigenFX.py`（特征分型状态机） |
-| **ZS** | "中枢"模型与识别 | `ZS.py`（中枢类，含范围/子中枢）、`ZSList.py`（中枢列表更新）、`ZSConfig.py`（是否合并/单笔中枢/算法配置） |
-| **doc** | 文档 | `0_系统迭代/`、`1_环境需求/`、`2_策略/`（缠论策略专业/白话版）、`3_备份/`、`4_系统术语/` |
+| **doc** | 文档 | `0_系统迭代/`、`1_环境需求/`、`2_策略/`、`3_备份/`、`4_系统术语/` |
 | **Image** | README 等文档用图片 | `frame.png`、`zs_algo.png`、`plot_cbsp.png` 等 |
 
-## 三、核心入口与配置文件说明
+## 四、核心入口与配置文件说明
 
-### `Chan.py` —— 核心引擎类 `CChan`
-- 接收：股票代码、起止时间、数据源（默认 BAO_STOCK）、级别列表（默认 `[K_DAY, K_60M]`，从高到低）、配置对象、复权类型。
-- 内部聚合每级别一份 `CKLine_List`，并持有 `g_kl_iter` 用于多级别对齐迭代。
+### `main.py` —— 缠论扫描终端入口（向后兼容）
+- 负责：BaoStock 登录（带重试）、最近交易日判定、`chan.db` 增量缓存更新、股票代码归一化、板块判定、批量扫描股票池汇总买点、单股终端表格输出。
+- import：`from Strategies.chan.Chan import CChan`，`DataAPI` 兼容层不变。
+
+### `cli.py` —— 多策略统一 CLI（新）
+- 功能：按策略名称选择策略，指定数据源/级别/起止/复权，运行回测。
+- 使用：`python cli.py --list`、`python cli.py --strategy example_ma --code sh.600008 --data-src sqlite --backtest`。
+- 通过 `Strategies.registry` 查找策略，`DataBasis` 获取数据，`Backtest.engine` 回测。
+
+### `Strategies/chan/Chan.py` —— 缠论核心引擎 `CChan`
+- 接收：股票代码、起止时间、数据源（默认 BAO_STOCK）、级别列表、配置对象、复权类型。
+- `GetStockAPI` 通过 `DataBasis.create_data_api` 获取数据源（返回 KBar），`load_stock_data` 经 `chan_adapter.kbar_to_klu` 转为 `CKLine_Unit`。
 - 支持 `trigger_step` 逐步喂数据用于回测；否则一次性 `load()` 完成全量计算。
 
-### `ChanConfig.py` —— 全局配置 `CChanConfig`
-- 聚合各子模块配置：`CBiConfig`（笔）、`CSegConfig`（线段）、`CZSConfig`（中枢）、`CBSPointConfig`（买卖点）。
-- 指标开关：MACD/BOLL/RSI/KDJ/Demark、均线周期列表、趋势周期。
-- 数据质量校验参数。
+### `Strategies/chan/chan_adapter.py` —— KBar↔CKLine_Unit 适配收口
+- `kbar_to_klu_dict`/`kbar_to_klu`：KBar → CKLine_Unit（time 转 CTime，auto=True）。
+- `autofix_for`：保留各数据源 autofix 设定（仅 CCXT 为 True）。
+- 这是 KBar 与 CKLine_Unit 之间唯一的转换处。
 
-### `main.py` —— 终端入口
-- 负责：BaoStock 登录（带重试）、最近交易日判定、`chan.db` 增量缓存更新、股票代码归一化、板块判定、批量扫描股票池汇总买点、单股终端表格输出。
+### `Strategies/chan/chan_strategy.py` —— 缠论回测适配器
+- 把 `CChan.trigger_load` 步进模型包装成 `CStrategy.on_bar` 回调模型，使缠论可经统一回测引擎回测。
+
+### `Backtest/engine.py` —— 统一回测引擎
+- 事件驱动逐 K 线推进：`strategy.on_bar(bar, ctx)` → `broker` 撮合 → 记录 `portfolio` 快照。
+- 输出 `BacktestResult`（交易记录、资金曲线、统计指标：胜率/回撤/夏普/年化）。
 
 ### `run.bat` / `setup_env.sh`
 - `run.bat`：Windows 一键运行——`conda activate chan_py311` → `python main.py`。
 - `setup_env.sh`：一键部署——创建 conda 环境 `chan_py311`，安装依赖并验证。
 
-## 四、数据流（缠论分析链路）
+## 五、数据流
 
-整体遵循缠论标准层级，逐级递进：
+### 缠论分析链路（新架构）
 
 ```
-行情数据源 (DataAPI: BaoStock/akshare/ccxt/SQLite/CSV)
-        │  逐根 yield CKLine_Unit（含 OHLC + 成交流 + 指标）
+行情数据源 (DataBasis: BaoStock/akshare/ccxt/SQLite/CSV)
+        │  逐根 yield KBar（纯 OHLCV，零缠论依赖）
         ▼
-K线合并层 (Combiner/KLine_Combiner + KLine/KLine.py)
-        │  按方向做 K 线包含处理 → 合并后 K 线 CKLine
-        │  识别顶/底分型
+chan_adapter.kbar_to_klu  (Strategies/chan/chan_adapter.py)
+        │  KBar → CKLine_Unit（time 转 CTime，挂载指标）
         ▼
-笔 Bi (Bi/BiList.py)
-        │  相邻分型连线构成一笔（含方向、是否确定）
+CChan (Strategies/chan/Chan.py)
+        │  K线合并(Combiner) → 分型 → 笔(Bi) → 线段(Seg) → 中枢(ZS) → 买卖点(BSP)
         ▼
-线段 Seg (Seg/SegListChan.py + Eigen/EigenFX)
-        │  基于笔的特征序列分型识别线段
-        ▼
-中枢 ZS (ZS/ZSList.py)
-        │  连续三笔重叠区间构成中枢
-        ▼
-买卖点 BuySellPoint (BSPointList.py)
-        │  结合中枢数量、背驰率、MACD 背驰判定一/二/三类买卖点
-        ▼
-输出 (Plot 绘图 / main.py 终端表格 / App GUI)
+输出 (Plot 绘图 / main.py 终端表格 / App GUI / Backtest 回测)
 ```
+
+### 统一回测链路
+
+```
+DataBasis.get_kl_data()  →  Iterable[KBar]
+        │
+        ▼
+Backtest.engine  逐 K 线驱动 strategy.on_bar(bar, ctx)
+        │  ctx.buy/sell → Broker 撮合 → Portfolio 记录
+        ▼
+BacktestResult  →  metrics（胜率/回撤/夏普/年化）
+```
+
+- 非缠论策略（example_ma）：直接实现 `on_bar`，只依赖 `KBar`。
+- 缠论策略（chan）：经 `ChanStrategyAdapter` 把 `trigger_load` 包装成 `on_bar`。
 
 ### 关键设计要点
 
-- **多级别联动**：`CChan.lv_list` 可配置多个级别（如日线+60分钟），低级别 K 线单元会挂到父级别 K 线上（`klu.sup_kl`），支撑跨级别背驰与买卖点判定。
-- **指标旁路**：MACD/BOLL/RSI/KDJ/Demark 在 `CKLine_Unit` 构造时同步计算，供背驰判定和绘图使用，不参与层级递进。
-- **缓存层**：`main.py` 通过 `ChanSqliteCache`（`chan.db`）做增量缓存，`SQLiteAPI` 作为数据源直接从缓存读，避免重复走网络。
-- **监控旁路**：`monitor/` 是独立的均线接近告警系统，不依赖缠论核心和 chan.db，直接用 akshare 拉数据做 SMA 判定。
+- **底座纯净**：`DataBasis/` 零缠论依赖，任何策略直接用 `KBar`。
+- **缠论去特权化**：缠论成为 `Strategies/chan/` 下与其他策略平级的一个策略，根目录只剩框架级文件。
+- **CTime 语义**：`KBar.time`（datetime）转 `CTime` 时统一 `auto=True`，日线（时分=0）自动对齐 23:59，分钟级别用真实时分。
+- **兼容平滑**：旧代码继续用 `DataAPI`/`main.py`，新代码用 `DataBasis`/`cli.py`，无需一次性迁移。
+- **监控旁路**：`monitor/` 是独立的均线接近告警系统，不依赖缠论核心和 chan.db。

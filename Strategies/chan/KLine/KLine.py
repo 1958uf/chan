@@ -1,8 +1,8 @@
-from Combiner.KLine_Combiner import CKLine_Combiner
+from ..Combiner.KLine_Combiner import CKLine_Combiner
 from Common.CEnum import FX_CHECK_METHOD, FX_TYPE, KLINE_DIR
 from Common.ChanException import CChanException, ErrCode
 from Common.func_util import has_overlap
-from KLine.KLine_Unit import CKLine_Unit
+from ..KLine.KLine_Unit import CKLine_Unit
 
 
 # 合并后的K线

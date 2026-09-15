@@ -1,7 +1,7 @@
 from typing import List, Optional, Union, overload
 
 from Common.CEnum import FX_TYPE, KLINE_DIR
-from KLine.KLine import CKLine
+from ..KLine.KLine import CKLine
 
 from .Bi import CBi
 from .BiConfig import CBiConfig

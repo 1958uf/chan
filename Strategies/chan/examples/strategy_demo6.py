@@ -4,10 +4,10 @@ from typing import Dict, TypedDict
 import xgboost as xgb
 from strategy_demo5 import stragety_feature
 
-from BuySellPoint.BS_Point import CBS_Point
-from Chan import CChan
-from ChanConfig import CChanConfig
-from ChanModel.Features import CFeatures
+from ..BuySellPoint.BS_Point import CBS_Point
+from ..Chan import CChan
+from ..ChanConfig import CChanConfig
+from ..ChanModel.Features import CFeatures
 from Common.CEnum import AUTYPE, DATA_SRC, KL_TYPE
 from Common.CTime import CTime
 

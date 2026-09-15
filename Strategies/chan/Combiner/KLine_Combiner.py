@@ -10,7 +10,7 @@ except ImportError:
 from Common.cache import make_cache
 from Common.CEnum import FX_TYPE, KLINE_DIR
 from Common.ChanException import CChanException, ErrCode
-from KLine.KLine_Unit import CKLine_Unit
+from ..KLine.KLine_Unit import CKLine_Unit
 
 from .Combine_Item import CCombine_Item
 

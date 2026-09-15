@@ -33,7 +33,7 @@ class CKLine_Unit:
         self.sub_kl_list = []  # 次级别KLU列表
         self.sup_kl: Optional[CKLine_Unit] = None  # 指向更高级别KLU
 
-        from KLine.KLine import CKLine
+        from ..KLine.KLine import CKLine
         self.__klc: Optional[CKLine] = None  # 指向KLine
 
         # self.macd: Optional[CMACD_item] = None

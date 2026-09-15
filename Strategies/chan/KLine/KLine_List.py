@@ -1,16 +1,16 @@
 import copy
 from typing import List, Union, overload
 
-from Bi.Bi import CBi
-from Bi.BiList import CBiList
-from BuySellPoint.BSPointList import CBSPointList
-from ChanConfig import CChanConfig
+from ..Bi.Bi import CBi
+from ..Bi.BiList import CBiList
+from ..BuySellPoint.BSPointList import CBSPointList
+from ..ChanConfig import CChanConfig
 from Common.CEnum import KLINE_DIR, SEG_TYPE
 from Common.ChanException import CChanException, ErrCode
-from Seg.Seg import CSeg
-from Seg.SegConfig import CSegConfig
-from Seg.SegListComm import CSegListComm
-from ZS.ZSList import CZSList
+from ..Seg.Seg import CSeg
+from ..Seg.SegConfig import CSegConfig
+from ..Seg.SegListComm import CSegListComm
+from ..ZS.ZSList import CZSList
 
 from .KLine import CKLine
 from .KLine_Unit import CKLine_Unit
@@ -18,15 +18,15 @@ from .KLine_Unit import CKLine_Unit
 
 def get_seglist_instance(seg_config: CSegConfig, lv) -> CSegListComm:
     if seg_config.seg_algo == "chan":
-        from Seg.SegListChan import CSegListChan
+        from ..Seg.SegListChan import CSegListChan
         return CSegListChan(seg_config, lv)
     elif seg_config.seg_algo == "1+1":
         print(f'Please avoid using seg_algo={seg_config.seg_algo} as it is deprecated and no longer maintained.')
-        from Seg.SegListDYH import CSegListDYH
+        from ..Seg.SegListDYH import CSegListDYH
         return CSegListDYH(seg_config, lv)
     elif seg_config.seg_algo == "break":
         print(f'Please avoid using seg_algo={seg_config.seg_algo} as it is deprecated and no longer maintained.')
-        from Seg.SegListDef import CSegListDef
+        from ..Seg.SegListDef import CSegListDef
         return CSegListDef(seg_config, lv)
     else:
         raise CChanException(f"unsupport seg algoright:{seg_config.seg_algo}", ErrCode.PARA_ERROR)

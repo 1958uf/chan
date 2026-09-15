@@ -4,13 +4,13 @@ import time
 
 import baostock as bs
 
-from Chan import CChan
-from ChanConfig import CChanConfig
+from Strategies.chan.Chan import CChan
+from Strategies.chan.ChanConfig import CChanConfig
 from Common.CEnum import AUTYPE, DATA_SRC, KL_TYPE
 from DataAPI.SQLiteAPI import SQLite_API
 from DataAPI.sqlite_cache import ChanSqliteCache
-from Plot.AnimatePlotDriver import CAnimateDriver
-from Plot.PlotDriver import CPlotDriver
+from Strategies.chan.Plot.AnimatePlotDriver import CAnimateDriver
+from Strategies.chan.Plot.PlotDriver import CPlotDriver
 
 # 本地 K 线缓存数据库文件（chan.db，供 /scan 增量复用；替代原 CSV 缓存层）
 _DB_PATH = "chan.db"

@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 from IPython.display import clear_output, display
 
-from Chan import CChan
+from ..Chan import CChan
 
 from .PlotDriver import CPlotDriver
 

@@ -3,8 +3,8 @@ try:
 except ImportError:
     from typing_extensions import Self
 
-from Bi.Bi import CBi
-from Combiner.KLine_Combiner import CKLine_Combiner
+from ..Bi.Bi import CBi
+from ..Combiner.KLine_Combiner import CKLine_Combiner
 from Common.CEnum import BI_DIR, FX_TYPE
 
 

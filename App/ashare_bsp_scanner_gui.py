@@ -46,8 +46,8 @@ import matplotlib.pyplot as plt
 import akshare as ak
 import pandas as pd
 
-from Chan import CChan
-from ChanConfig import CChanConfig
+from Strategies.chan.Chan import CChan
+from Strategies.chan.ChanConfig import CChanConfig
 from Common.CEnum import AUTYPE, DATA_SRC, KL_TYPE
 
 

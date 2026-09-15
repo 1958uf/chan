@@ -3,8 +3,8 @@ from typing import List, Optional
 from Common.cache import make_cache
 from Common.CEnum import BI_DIR, BI_TYPE, DATA_FIELD, FX_TYPE, MACD_ALGO
 from Common.ChanException import CChanException, ErrCode
-from KLine.KLine import CKLine
-from KLine.KLine_Unit import CKLine_Unit
+from ..KLine.KLine import CKLine
+from ..KLine.KLine_Unit import CKLine_Unit
 
 
 class CBi:
@@ -23,10 +23,10 @@ class CBi:
 
         self.__seg_idx: Optional[int] = None
 
-        from Seg.Seg import CSeg
+        from ..Seg.Seg import CSeg
         self.parent_seg: Optional[CSeg[CBi]] = None  # 在哪个线段里面
 
-        from BuySellPoint.BS_Point import CBS_Point
+        from ..BuySellPoint.BS_Point import CBS_Point
         self.bsp: Optional[CBS_Point] = None  # 尾部是不是买卖点
 
         self.next: Optional[CBi] = None

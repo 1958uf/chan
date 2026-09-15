@@ -1,14 +1,14 @@
 from typing import List
 
-from Bi.Bi import CBi
-from BuySellPoint.BS_Point import CBS_Point
+from ..Bi.Bi import CBi
+from ..BuySellPoint.BS_Point import CBS_Point
 from Common.CEnum import FX_TYPE
-from KLine.KLine import CKLine
-from KLine.KLine_List import CKLine_List
-from Seg.Eigen import CEigen
-from Seg.EigenFX import CEigenFX
-from Seg.Seg import CSeg
-from ZS.ZS import CZS
+from ..KLine.KLine import CKLine
+from ..KLine.KLine_List import CKLine_List
+from ..Seg.Eigen import CEigen
+from ..Seg.EigenFX import CEigenFX
+from ..Seg.Seg import CSeg
+from ..ZS.ZS import CZS
 
 
 class Cklc_meta:
