@@ -103,6 +103,12 @@ def main(argv=None) -> int:
     finally:
         api_cls.do_close()
 
+    # 空数据提示：避免"静默 0 交易"被误读为策略无信号
+    if not result.equity_curve:
+        print(f"警告：数据源 {args.data_src} 未返回 {args.code}（{args.k_type}）的任何 K 线数据，"
+              f"回测未实际运行。请检查代码/日期区间/缓存库是否包含该标的。")
+        return 1
+
     print(result.summary())
     return 0
 

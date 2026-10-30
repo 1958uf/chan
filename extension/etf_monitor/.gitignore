@@ -1,0 +1,15 @@
+.venv/
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+runtime/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage*
+htmlcov/
+.env
+logs/
+artifacts/

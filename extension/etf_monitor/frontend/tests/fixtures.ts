@@ -1,0 +1,11 @@
+import type { Analysis, Dashboard, ETF, ETFDetail, Health, HolderRecord, Settings, Task } from '../src/api/types';
+
+// 仅测试使用的 REST 契约样例，不被运行时应用导入，也不替代真实接口。
+export const etf: ETF = { code: '510300', name: '沪深300ETF', group: '沪深300', exchange: 'sh', enabled: true, tags: ['宽基'] };
+export const analysis: Analysis = { latest_shares: 120000000, share_date: '2026-10-28', delta_shares: 2000000, delta_pct: 1.7, estimated_flow: 8000000, flow_5d: 20000000, flow_20d: null, price: 4, quote_time: '2026-10-29T10:00:00+08:00', premium_pct: null, quality: 'demo', score: 40, coverage: 50, label: '证据有限', indicators: [{ name: '份额变化', value: 1.7, state: 'unknown', explanation: '缺少足够连续历史' }], history: [] };
+export const health: Health = { mode: 'demo', status: 'degraded', now: '2026-10-29T10:00:00+08:00', sources: [{ source: 'demo', status: 'stale', last_success: '2026-10-28T16:00:00+08:00', error: '源记录陈旧' }], scheduler_enabled: false };
+export const dashboard: Dashboard = { mode: 'demo', as_of: health.now, etfs: [{ ...etf, ...analysis }], groups: [{ group: '沪深300', flow: 8000000, count: 1, quality: 'demo' }], market: [], notice: '演示契约样例' };
+export const holder: HolderRecord = { code: '510300', report_date: '2026-06-30', published_on: null, holder: '测试报告持有人', shares: 10000000, ratio_pct: 5, source: '契约测试报告', fetched_at: health.now, quality: 'demo', source_url: '' };
+export const detail: ETFDetail = { etf, analysis, shares: [{ code: etf.code, trade_date: '2026-10-28', shares: 120000000, source: 'demo', fetched_at: health.now, quality: 'demo' }], quotes: [{ code: etf.code, quote_time: analysis.quote_time!, price: 4, source: 'demo', fetched_at: health.now, quality: 'demo' }], navs: [{ code: etf.code, trade_date: '2026-10-28', nav: 4, source: 'demo', fetched_at: health.now, quality: 'demo' }], bars: [{ code: etf.code, time: '2026-10-28T15:00:00+08:00', interval: 'day', open: 3.9, high: 4.1, low: 3.8, close: 4, source: 'demo', fetched_at: health.now, quality: 'demo' }], holders: [holder] };
+export const task: Task = { id: 'task-1', kind: 'refresh', status: 'running', progress: 20, message: '正在获取行情', created_at: health.now, finished_at: null };
+export const settings: Settings = { mode: 'demo', scheduler_enabled: false, quote_interval: 30, request_timeout: 15, max_retries: 2, max_backfill_days: 366, alert_cooldown_seconds: 1800, shares_alert_pct: 2 };

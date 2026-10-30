@@ -231,24 +231,23 @@ class CBacktestEngine:
 
 **缠论接入回测的桥接**（关键，文档此前未说清）：
 
-缠论的 `CChan.trigger_step()` 是"步进式喂下一根 K 线并触发计算"，与 `CStrategy.on_bar(bar)` 的逐 K 线回调语义不同。桥接方式：在 `Strategies/chan/chan_adapter.py` 提供 `ChanStrategyAdapter(CStrategy)`：
+缠论的 `CChan.trigger_load()` 是"步进式喂下一批 K 线并触发计算"，与 `CStrategy.on_bar(bar)` 的逐 K 线回调语义不同。桥接方式：在 `Strategies/chan/chan_strategy.py` 提供 `ChanStrategyAdapter(CStrategy)`：
 
 ```python
 class ChanStrategyAdapter(CStrategy):
     """缠论策略的回测适配器。
-    功能：把 CChan 的 trigger_step 步进模型包装成 CStrategy.on_bar 回调模型。
-    实现：内部持有 CChan 实例，on_bar 时调用 chan.trigger_step() 喂入该 K 线，
-         然后查询 chan 最新买卖点状态，转化为下单信号交给 ctx。
+    功能：把 CChan 的 trigger_load 步进模型包装成 CStrategy.on_bar 回调模型。
+    实现：内部持有 CChan 实例（trigger_step=True 模式，不自动 load），on_bar 时
+         调用 chan.trigger_load() 喂入该 K 线，然后查询新增买卖点，转化为下单信号交给 ctx。
     """
     def __init__(self, code, k_type, begin_date, end_date, data_src, autype, chan_config=None):
         super().__init__(...)
         self._chan = CChan(code, begin_time=begin_date, end_time=end_date,
                            data_src=data_src, lv_list=[k_type], config=chan_config)
     def on_bar(self, bar: KBar, ctx):
-        klu_dict = kbar_to_klu_dict(bar, autofix=autofix_for(self.data_src))
-        klu = CKLine_Unit(klu_dict)
-        self._chan.trigger_step(klu)  # 逐步喂数据
-        bsp_list = self._chan.get_bsp_last_step()  # 取本步新增买卖点
+        klu = kbar_to_klu(bar, autofix=autofix_for(self.data_src))  # KBar -> CKLine_Unit
+        self._chan.trigger_load({self.k_type: [klu]})  # 逐步喂数据
+        bsp_list = ... # 对比喂入前后 kl_data.bs_point_lst 长度，取本步新增买卖点
         for bsp in bsp_list:
             if bsp.is_buy:
                 ctx.buy(self.code, bar.close)
@@ -256,7 +255,7 @@ class ChanStrategyAdapter(CStrategy):
                 ctx.sell(self.code, bar.close)
 ```
 
-> 这样回测引擎无需感知缠论内部，缠论也无需改造 `trigger_step`。非回测场景（扫描）仍直接用 `CChan`。
+> 这样回测引擎无需感知缠论内部，缠论也无需改造 `trigger_load`。非回测场景（扫描）仍直接用 `CChan`。
 
 ### 第 5 层：兼容层 DataAPI/
 
@@ -370,7 +369,7 @@ class ChanStrategyAdapter(CStrategy):
 2. **`ChanModel` 遗漏导致 `BS_Point` import 失败**：买卖点模块是缠论核心依赖链末端，遗漏会连锁失败。**对策**：步骤 3 完成后立即跑 `python -c "from Strategies.chan.BuySellPoint.BS_Point import CBS_Point"`。
 3. **`CTime` auto 语义误用**：若适配层对分钟级别也传 `auto=False` 或截断错误，多级别对齐会错乱（日线 ts 变成 00:00 而非 23:59）。**对策**：统一传 `auto=True`，并用单股日线用例对比重构前后 `klu.time.ts` 一致。
 4. **`__init__.py` 缺失致包化失败**：相对 import 全部报错。**对策**：步骤 3 第一步就批量建空 `__init__.py`。
-5. **回测-缠论桥接语义偏差**：`trigger_step` 喂入的是 `CKLine_Unit`，而 `on_bar` 拿到的是 `KBar`，中间转换若 autofix/时间不一致会导致缠论计算结果与直接运行 `CChan` 不同。**对策**：步骤 9 用同一股票、同一时段对比 `ChanStrategyAdapter` 回测的买卖点与 `CChan` 直跑的买卖点一致。
+5. **回测-缠论桥接语义偏差**：`trigger_load` 喂入的是 `CKLine_Unit`，而 `on_bar` 拿到的是 `KBar`，中间转换若 autofix/时间不一致会导致缠论计算结果与直接运行 `CChan` 不同。**对策**：步骤 9 用同一股票、同一时段对比 `ChanStrategyAdapter` 回测的买卖点与 `CChan` 直跑的买卖点一致。
 
 ### 回滚策略
 

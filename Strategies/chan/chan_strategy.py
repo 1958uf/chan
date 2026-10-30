@@ -11,7 +11,7 @@
 """
 from typing import Optional
 
-from Common.CEnum import AUTYPE, DATA_SRC, KL_TYPE
+from Common.CEnum import AUTYPE, BSP_TYPE, DATA_SRC, KL_TYPE
 from DataBasis.kbar import KBar
 from Strategies.base import BacktestContext, CStrategy
 from Strategies.registry import register
@@ -19,6 +19,13 @@ from Strategies.registry import register
 from .Chan import CChan
 from .ChanConfig import CChanConfig
 from .chan_adapter import autofix_for, kbar_to_klu
+
+# 参与交易信号的买卖点类型：一/二/三类买卖点（T3L 类低级别三类点不触发信号）
+_SIGNAL_BSP_TYPES = frozenset({
+    BSP_TYPE.T1, BSP_TYPE.T1P,
+    BSP_TYPE.T2, BSP_TYPE.T2S,
+    BSP_TYPE.T3A, BSP_TYPE.T3B,
+})
 
 
 @register("chan")
@@ -73,24 +80,19 @@ class ChanStrategyAdapter(CStrategy):
 
         # 有新增买卖点时产生交易信号
         if cur_count > self._last_bsp_count:
+            # 按笔序排列的买卖点列表，与 bsp_iter 顺序一致
+            sorted_bsps = bsp_lst.getSortedBspList()
             for i in range(self._last_bsp_count, cur_count):
-                bsp = bsp_lst.getSortedBspList()[i] if hasattr(bsp_lst, "getSortedBspList") else None
-                if bsp is None:
-                    continue
-                bsp_type = bsp.type
-                # 一类、二类买点买入；卖点卖出
-                is_buy = any(t in [bsp_type] for t in [])  # bsp.type 是列表
-                # bsp.type 可能是 BSP_TYPE 或列表，统一处理
+                bsp = sorted_bsps[i]
+                # bsp.type 是 List[BSP_TYPE]；一类/二类/三类买卖点视为交易信号，其余（如 T3L 类）忽略
                 types = bsp.type if isinstance(bsp.type, list) else [bsp.type]
-                from Common.CEnum import BSP_TYPE
-                buy_types = [BSP_TYPE.T1, BSP_TYPE.T1P, BSP_TYPE.T2, BSP_TYPE.T2S, BSP_TYPE.T3A, BSP_TYPE.T3B]
-                is_buy = any(t in buy_types for t in types)
-                if is_buy:
-                    if ctx.position == 0:
-                        ctx.buy(self.code, bar.close)
-                else:
-                    if ctx.position > 0:
-                        ctx.sell(self.code, bar.close)
+                if any(t in _SIGNAL_BSP_TYPES for t in types):
+                    if bsp.is_buy:
+                        if ctx.position == 0:
+                            ctx.buy(self.code, bar.close)
+                    else:
+                        if ctx.position > 0:
+                            ctx.sell(self.code, bar.close)
             self._last_bsp_count = cur_count
 
     def generate_signals(self):

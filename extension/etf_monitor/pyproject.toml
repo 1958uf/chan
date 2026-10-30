@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "a-share-etf-monitor"
+version = "0.1.0"
+description = "沪深ETF份额、盘中线索与公开披露的独立本地监控"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi==0.162.0", "uvicorn==0.34.2", "pydantic==2.11.4",
+  "httpx==0.28.1", "pandas==2.2.3", "openpyxl==3.1.5",
+  "requests==2.34.2", "akshare==1.20.2", "apscheduler==3.11.0"
+]
+
+[project.optional-dependencies]
+test = ["pytest==8.3.5", "pytest-cov==6.1.1", "ruff==0.11.9"]
+
+[tool.setuptools.packages.find]
+where = ["backend"]
+
+[tool.pytest.ini_options]
+pythonpath = ["backend"]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = ["live: 有限的公开上游契约验收，默认不执行"]
+
+[tool.coverage.run]
+source = ["etf_monitor"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 110
